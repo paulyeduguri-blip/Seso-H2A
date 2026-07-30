@@ -335,11 +335,11 @@ let sortDir = -1;
 
 async function loadData(){
   const [ae, te, ss, is, tot] = await Promise.all([
-    fetch('data/all_employers.json').then(r=>r.json()),
-    fetch('data/top_employers.json').then(r=>r.json()),
-    fetch('data/state_summary.json').then(r=>r.json()),
-    fetch('data/industry_summary.json').then(r=>r.json()),
-    fetch('data/totals.json').then(r=>r.json()),
+    fetch('all_employers.json').then(r=>r.json()),
+    fetch('top_employers.json').then(r=>r.json()),
+    fetch('state_summary.json').then(r=>r.json()),
+    fetch('industry_summary.json').then(r=>r.json()),
+    fetch('totals.json').then(r=>r.json()),
   ]);
   allEmployers = ae; topEmployers = te; stateSummary = ss; industrySummary = is; totals = tot;
   renderHeroStats();
