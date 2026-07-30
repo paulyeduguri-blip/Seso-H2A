@@ -433,16 +433,36 @@ document.getElementById('minScore').addEventListener('change', renderBoard);
 const searchInput = document.getElementById('searchInput');
 const searchResults = document.getElementById('searchResults');
 
+const STATE_NAMES = {
+  ALABAMA:'AL', ALASKA:'AK', ARIZONA:'AZ', ARKANSAS:'AR', CALIFORNIA:'CA', COLORADO:'CO',
+  CONNECTICUT:'CT', DELAWARE:'DE', FLORIDA:'FL', GEORGIA:'GA', HAWAII:'HI', IDAHO:'ID',
+  ILLINOIS:'IL', INDIANA:'IN', IOWA:'IA', KANSAS:'KS', KENTUCKY:'KY', LOUISIANA:'LA',
+  MAINE:'ME', MARYLAND:'MD', MASSACHUSETTS:'MA', MICHIGAN:'MI', MINNESOTA:'MN',
+  MISSISSIPPI:'MS', MISSOURI:'MO', MONTANA:'MT', NEBRASKA:'NE', NEVADA:'NV',
+  'NEW HAMPSHIRE':'NH', 'NEW JERSEY':'NJ', 'NEW MEXICO':'NM', 'NEW YORK':'NY',
+  'NORTH CAROLINA':'NC', 'NORTH DAKOTA':'ND', OHIO:'OH', OKLAHOMA:'OK', OREGON:'OR',
+  PENNSYLVANIA:'PA', 'RHODE ISLAND':'RI', 'SOUTH CAROLINA':'SC', 'SOUTH DAKOTA':'SD',
+  TENNESSEE:'TN', TEXAS:'TX', UTAH:'UT', VERMONT:'VT', VIRGINIA:'VA', WASHINGTON:'WA',
+  'WEST VIRGINIA':'WV', WISCONSIN:'WI', WYOMING:'WY', 'PUERTO RICO':'PR'
+};
+
 searchInput.addEventListener('input', ()=>{
-  const q = searchInput.value.trim().toUpperCase();
-  if(q.length < 2){ searchResults.classList.remove('show'); return; }
+  const raw = searchInput.value.trim().toUpperCase();
+  if(raw.length < 2){ searchResults.classList.remove('show'); return; }
+
+  // if the query matches a full state name, search by its abbreviation instead/also
+  const stateFromName = STATE_NAMES[raw];
+  const q = raw;
 
   const matches = allEmployers.filter(e=>
-    e.Employer.includes(q) || e.Home_State === q
+    e.Employer.includes(q) ||
+    (e.Home_City || '').toUpperCase().includes(q) ||
+    e.Home_State === q ||
+    (stateFromName && e.Home_State === stateFromName)
   ).sort((a,b)=>b.Total_Approved - a.Total_Approved).slice(0,25);
 
   if(matches.length===0){
-    searchResults.innerHTML = `<div class="no-results">No employers match "${searchInput.value}". Try a shorter fragment or a state abbreviation.</div>`;
+    searchResults.innerHTML = `<div class="no-results">No employers match "${searchInput.value}". Try a shorter fragment, a city, or a state name/abbreviation.</div>`;
   } else {
     searchResults.innerHTML = matches.map(e=>`
       <div class="result-row">
@@ -454,6 +474,7 @@ searchInput.addEventListener('input', ()=>{
           <span>${e.Total_Approved.toLocaleString()} approved</span>
           <span>${e.Petitions_Filed} filing${e.Petitions_Filed>1?'s':''}</span>
           <span>${e.Denial_Rate}% denied</span>
+
         </div>
       </div>
     `).join('');
