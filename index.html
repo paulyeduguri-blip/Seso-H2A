@@ -30,7 +30,6 @@
   }
   .wrap{max-width:1180px;margin:0 auto;padding:0 24px;}
 
-  /* ---- Header / Hero ---- */
   header.hero{
     background:
       repeating-linear-gradient(180deg, transparent, transparent 27px, var(--ledger-line) 28px),
@@ -87,7 +86,6 @@
   }
   .stat .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
 
-  /* ---- Search (the 60-second moment) ---- */
   .search-block{padding:38px 0 10px;}
   .search-box{
     position:relative;
@@ -139,7 +137,6 @@
   .result-metrics{display:flex; gap:16px; font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--soil); white-space:nowrap;}
   .no-results{padding:16px; color:var(--muted); font-size:14px;}
 
-  /* ---- Sections ---- */
   section{padding:52px 0;border-bottom:1px solid var(--ledger-line);}
   .section-head{display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:14px; margin-bottom:22px;}
   .section-eyebrow{
@@ -153,7 +150,6 @@
   h2{font-family:'Fraunces',serif; font-weight:600; font-size:26px; margin:0;}
   .section-desc{max-width:60ch; color:var(--muted); font-size:14.5px; margin-top:6px;}
 
-  /* ---- Filters ---- */
   .filters{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
   .filters select{
     font-family:'IBM Plex Mono', monospace;
@@ -165,7 +161,6 @@
     color:var(--ink);
   }
 
-  /* ---- Table ---- */
   table{width:100%; border-collapse:collapse; font-size:13.5px;}
   thead th{
     text-align:left;
@@ -211,7 +206,6 @@
   .emp-name{font-weight:600;}
   .emp-loc{font-size:12px; color:var(--muted);}
 
-  /* ---- Bars (state/industry charts) ---- */
   .bar-chart{display:flex; flex-direction:column; gap:9px;}
   .bar-row{display:grid; grid-template-columns:70px 1fr 90px; align-items:center; gap:10px; font-size:13px;}
   .bar-label{font-family:'IBM Plex Mono',monospace; font-weight:600;}
@@ -350,9 +344,6 @@ async function loadData(){
 }
 
 function renderHeroStats(){
-  // Use row-level totals, not the employer/state rollups — those groupby operations
-  // silently drop rows with a null employer name or null worksite state, which
-  // undercounts real petitions. totals.json is computed straight from every row.
   const denialRate = (totals.true_total_denied/(totals.true_total_approved+totals.true_total_denied)*100).toFixed(1);
   const stats = document.querySelectorAll('#heroStats .stat .num');
   stats[0].textContent = totals.true_total_approved.toLocaleString();
@@ -429,7 +420,6 @@ document.querySelectorAll('#boardTable thead th').forEach(th=>{
 document.getElementById('stateFilter').addEventListener('change', renderBoard);
 document.getElementById('minScore').addEventListener('change', renderBoard);
 
-// ---- Search ----
 const searchInput = document.getElementById('searchInput');
 const searchResults = document.getElementById('searchResults');
 
@@ -446,20 +436,20 @@ const STATE_NAMES = {
   'WEST VIRGINIA':'WV', WISCONSIN:'WI', WYOMING:'WY', 'PUERTO RICO':'PR'
 };
 
+const VALID_STATE_CODES = new Set(Object.values(STATE_NAMES));
+
 searchInput.addEventListener('input', ()=>{
   const raw = searchInput.value.trim().toUpperCase();
   if(raw.length < 2){ searchResults.classList.remove('show'); return; }
 
-  // if the query matches a full state name, search by its abbreviation instead/also
   const stateFromName = STATE_NAMES[raw];
-  const q = raw;
+  const isStateQuery = VALID_STATE_CODES.has(raw) || !!stateFromName;
+  const targetState = stateFromName || raw;
 
-  const matches = allEmployers.filter(e=>
-    e.Employer.includes(q) ||
-    (e.Home_City || '').toUpperCase().includes(q) ||
-    e.Home_State === q ||
-    (stateFromName && e.Home_State === stateFromName)
-  ).sort((a,b)=>b.Total_Approved - a.Total_Approved).slice(0,25);
+  const matches = allEmployers.filter(e=>{
+    if(isStateQuery) return e.Home_State === targetState;
+    return e.Employer.includes(raw) || (e.Home_City || '').toUpperCase().includes(raw);
+  }).sort((a,b)=>b.Total_Approved - a.Total_Approved).slice(0,25);
 
   if(matches.length===0){
     searchResults.innerHTML = `<div class="no-results">No employers match "${searchInput.value}". Try a shorter fragment, a city, or a state name/abbreviation.</div>`;
@@ -474,7 +464,6 @@ searchInput.addEventListener('input', ()=>{
           <span>${e.Total_Approved.toLocaleString()} approved</span>
           <span>${e.Petitions_Filed} filing${e.Petitions_Filed>1?'s':''}</span>
           <span>${e.Denial_Rate}% denied</span>
-
         </div>
       </div>
     `).join('');
@@ -486,7 +475,6 @@ document.addEventListener('click', (e)=>{
   if(!e.target.closest('.search-block')) searchResults.classList.remove('show');
 });
 
-// ---- Charts ----
 function renderStateChart(){
   const top = stateSummary.slice(0,12);
   const max = Math.max(...top.map(s=>s.Total_Approved));
