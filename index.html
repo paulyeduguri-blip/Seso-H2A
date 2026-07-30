@@ -386,8 +386,8 @@ const ALL_YEARS = ['2015','2016','2017','2018','2019','2020','2021','2022','2023
 async function loadYearData(year){
   if(yearCache[year]) return yearCache[year];
   const [te, ae] = await Promise.all([
-    fetch(`by_year/top_employers_${year}.json`).then(r=>r.json()),
-    fetch(`by_year/all_employers_${year}.json`).then(r=>r.json()),
+    fetch(`top_employers_${year}.json`).then(r=>r.json()),
+    fetch(`all_employers_${year}.json`).then(r=>r.json()),
   ]);
   yearCache[year] = { topEmployers: te, allEmployers: ae };
   return yearCache[year];
