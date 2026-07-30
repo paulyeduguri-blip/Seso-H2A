@@ -223,6 +223,11 @@
   .two-col{display:grid; grid-template-columns:1.3fr 1fr; gap:40px;}
   @media (max-width:820px){ .two-col{grid-template-columns:1fr;} }
 
+  .notice{
+    background:rgba(167,73,47,.08); border:1px solid rgba(167,73,47,.3); border-radius:8px;
+    padding:12px 16px; font-size:13px; color:var(--rust); margin-bottom:20px;
+  }
+
   .mini-row{
     display:flex; justify-content:space-between; align-items:center;
     padding:10px 0; border-bottom:1px solid var(--ledger-line); font-size:13.5px;
@@ -253,9 +258,9 @@
 
 <header class="hero">
   <div class="wrap">
-    <div class="eyebrow">USCIS H-2A Employer Data Hub · FY2026 Q2 Snapshot</div>
-    <h1>Every H-2A petition filed this year, <em>ranked by who's worth calling.</em></h1>
-    <p class="hero-sub">13,438 petitions from 8,651 employers, turned into a prospecting board. Search any employer, or scan the ranked list below for accounts with real scale, frequent filings, multi-state complexity, or compliance pain worth solving.</p>
+    <div class="eyebrow">USCIS H-2A Employer Data Hub · <span id="eyebrowYear">FY2026 Q2 Snapshot</span></div>
+    <h1>Every H-2A petition filed <span id="heroYearText">this year</span>, <em>ranked by who's worth calling.</em></h1>
+    <p class="hero-sub" id="heroSubText">Turned into a prospecting board. Search any employer, or scan the ranked list below for accounts with real scale, frequent filings, multi-state complexity, or compliance pain worth solving.</p>
     <div class="stat-row" id="heroStats">
       <div class="stat"><div class="num">—</div><div class="lbl">Workers Approved</div></div>
       <div class="stat"><div class="num">—</div><div class="lbl">Unique Employers</div></div>
@@ -269,7 +274,7 @@
 
   <div class="search-block">
     <div class="search-box">
-      <input type="text" id="searchInput" placeholder="Search any of 8,651 employers by name or state (e.g. GA, WASHINGTON FRUIT)..." autocomplete="off">
+      <input type="text" id="searchInput" placeholder="Search employers by name or state (e.g. GA, WASHINGTON FRUIT)..." autocomplete="off">
     </div>
     <div class="search-hint">Try: your target state abbreviation, or a company name fragment.</div>
     <div id="searchResults"></div>
@@ -283,6 +288,7 @@
         <p class="section-desc">Score blends worker volume (45%), filing frequency (25%), multi-state complexity (15%), and denial-rate pain (15%). Only employers with 10+ total petitioned workers are ranked — smaller filers are searchable above but excluded from scoring to avoid noise.</p>
       </div>
       <div class="filters">
+        <select id="yearFilter"></select>
         <select id="stateFilter"><option value="">All worksite states</option></select>
         <select id="minScore">
           <option value="0">Any score</option>
@@ -315,10 +321,11 @@
       <div>
         <div class="section-eyebrow">Market Overview</div>
         <h2>Where the H-2A workforce actually is</h2>
-        <p class="section-desc">Approved workers by worksite state and by industry, FY2026 (Q2 snapshot).</p>
+        <p class="section-desc" id="overviewDesc">Approved workers by worksite state and by industry.</p>
       </div>
     </div>
-    <div class="two-col">
+    <div id="overviewNotice"></div>
+    <div class="two-col" id="overviewCharts">
       <div>
         <h3 style="font-family:'IBM Plex Mono',monospace; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:16px;">Top 12 worksite states</h3>
         <div class="bar-chart" id="stateChart"></div>
@@ -356,55 +363,92 @@
   <footer>
     Source: USCIS H-2A Employer Data Hub, FY2026 Q2 export. Built as a live prospecting tool — not an official USCIS product. Denial rates reflect first adjudicative decisions only, not appeals or revocations.
     <br><br>
-    Data note: 8,651 named employers filed 13,438 petitions this fiscal year. Headline totals (approved/denied workers, state count) are computed from every record in the source file. 118 petitions have no employer name on file and are excluded from the search and ranking tables below since they can't be attributed to a specific account — their worker counts are still included in the totals above.
+    Data note: headline totals (approved/denied workers, state count) are computed from every record in the source file for the selected fiscal year. A small number of petitions each year have no employer name on file and are excluded from the search and ranking tables since they can't be attributed to a specific account — their worker counts are still included in the totals above. Worksite state and industry weren't consistently collected before FY2018, so the Market Overview charts aren't available for FY2015–FY2017.
   </footer>
 </div>
 
 <script>
 let allEmployers = [];
 let topEmployers = [];
-let stateSummary = [];
-let industrySummary = [];
-let totals = {};
+let stateSummaryByYear = {};
+let industrySummaryByYear = {};
+let totalsByYear = {};
 let yearTrend = [];
 let newLogos = [];
 let topGrowers = [];
 let sortKey = 'Prospect_Score';
 let sortDir = -1;
+let currentYear = '2026';
+const yearCache = {}; // { "2025": {topEmployers:[...], allEmployers:[...]} }
+
+const ALL_YEARS = ['2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026'];
+
+async function loadYearData(year){
+  if(yearCache[year]) return yearCache[year];
+  const [te, ae] = await Promise.all([
+    fetch(`by_year/top_employers_${year}.json`).then(r=>r.json()),
+    fetch(`by_year/all_employers_${year}.json`).then(r=>r.json()),
+  ]);
+  yearCache[year] = { topEmployers: te, allEmployers: ae };
+  return yearCache[year];
+}
 
 async function loadData(){
-  const [ae, te, ss, is, tot, yr, nl, tg] = await Promise.all([
-    fetch('all_employers.json').then(r=>r.json()),
-    fetch('top_employers.json').then(r=>r.json()),
-    fetch('state_summary.json').then(r=>r.json()),
-    fetch('industry_summary.json').then(r=>r.json()),
-    fetch('totals.json').then(r=>r.json()),
+  const [ssY, isY, totY, yr, nl, tg, initial] = await Promise.all([
+    fetch('state_summary_by_year.json').then(r=>r.json()),
+    fetch('industry_summary_by_year.json').then(r=>r.json()),
+    fetch('totals_by_year.json').then(r=>r.json()),
     fetch('fiscal_year_trend.json').then(r=>r.json()),
     fetch('new_logos.json').then(r=>r.json()),
     fetch('top_growers.json').then(r=>r.json()),
+    loadYearData(currentYear),
   ]);
-  allEmployers = ae; topEmployers = te; stateSummary = ss; industrySummary = is; totals = tot;
+  stateSummaryByYear = ssY; industrySummaryByYear = isY; totalsByYear = totY;
   yearTrend = yr; newLogos = nl; topGrowers = tg;
+  topEmployers = initial.topEmployers; allEmployers = initial.allEmployers;
+
+  populateYearFilter();
   renderHeroStats();
   populateStateFilter();
   renderBoard();
-  renderStateChart();
-  renderIndustryChart();
+  renderOverview();
   renderYearChart();
   renderNewLogos();
   renderGrowers();
 }
 
+function populateYearFilter(){
+  const sel = document.getElementById('yearFilter');
+  sel.innerHTML = ALL_YEARS.map(y => `<option value="${y}"${y===currentYear?' selected':''}>FY${y}</option>`).join('');
+  sel.addEventListener('change', async ()=>{
+    currentYear = sel.value;
+    const data = await loadYearData(currentYear);
+    topEmployers = data.topEmployers;
+    allEmployers = data.allEmployers;
+    renderHeroStats();
+    populateStateFilter();
+    document.getElementById('stateFilter').value = '';
+    renderBoard();
+    renderOverview();
+    searchResults.classList.remove('show');
+    searchInput.value = '';
+  });
+}
+
 function renderHeroStats(){
-  // Use row-level totals, not the employer/state rollups — those groupby operations
-  // silently drop rows with a null employer name or null worksite state, which
-  // undercounts real petitions. totals.json is computed straight from every row.
-  const denialRate = (totals.true_total_denied/(totals.true_total_approved+totals.true_total_denied)*100).toFixed(1);
+  const t = totalsByYear[currentYear];
+  const denialRate = (t.true_total_denied/(t.true_total_approved+t.true_total_denied)*100).toFixed(1);
   const stats = document.querySelectorAll('#heroStats .stat .num');
-  stats[0].textContent = totals.true_total_approved.toLocaleString();
-  stats[1].textContent = totals.named_employers.toLocaleString();
-  stats[2].textContent = totals.worksite_states_count;
+  stats[0].textContent = t.true_total_approved.toLocaleString();
+  stats[1].textContent = t.named_employers.toLocaleString();
+  stats[2].textContent = t.worksite_states_count;
   stats[3].textContent = denialRate + '%';
+
+  const isLatest = currentYear === ALL_YEARS[ALL_YEARS.length-1];
+  document.getElementById('eyebrowYear').textContent = `FY${currentYear}${isLatest ? ' Q2 Snapshot' : ''}`;
+  document.getElementById('heroYearText').textContent = isLatest ? 'this year' : `in FY${currentYear}`;
+  document.getElementById('searchInput').placeholder = `Search ${t.named_employers.toLocaleString()} FY${currentYear} employers by name or state...`;
+  document.getElementById('heroSubText').textContent = `${t.true_total_petitions.toLocaleString()} petitions from ${t.named_employers.toLocaleString()} employers, turned into a prospecting board. Search any employer, or scan the ranked list below for accounts with real scale, frequent filings, multi-state complexity, or compliance pain worth solving.`;
 }
 
 function populateStateFilter(){
@@ -535,8 +579,28 @@ document.addEventListener('click', (e)=>{
 });
 
 // ---- Charts ----
-function renderStateChart(){
-  const top = stateSummary.slice(0,12);
+function renderOverview(){
+  const ss = stateSummaryByYear[currentYear] || [];
+  const is = industrySummaryByYear[currentYear] || [];
+  const desc = document.getElementById('overviewDesc');
+  const notice = document.getElementById('overviewNotice');
+  const charts = document.getElementById('overviewCharts');
+
+  desc.textContent = `Approved workers by worksite state and by industry, FY${currentYear}.`;
+
+  if(ss.length < 5){
+    notice.innerHTML = `<div class="notice">USCIS didn't collect worksite state or industry data in the Data Hub for FY${currentYear} — that reporting only became consistent starting FY2018. State/industry charts aren't available for this year.</div>`;
+    charts.style.display = 'none';
+    return;
+  }
+  notice.innerHTML = '';
+  charts.style.display = '';
+  renderStateChart(ss);
+  renderIndustryChart(is);
+}
+
+function renderStateChart(ss){
+  const top = ss.slice(0,12);
   const max = Math.max(...top.map(s=>s.Total_Approved));
   document.getElementById('stateChart').innerHTML = top.map(s=>`
     <div class="bar-row">
@@ -547,8 +611,9 @@ function renderStateChart(){
   `).join('');
 }
 
-function renderIndustryChart(){
-  const top = industrySummary.slice(0,8);
+function renderIndustryChart(is){
+  const top = is.slice(0,8);
+  if(top.length === 0){ document.getElementById('industryChart').innerHTML = ''; return; }
   const max = Math.max(...top.map(s=>s.Total_Approved));
   document.getElementById('industryChart').innerHTML = top.map(s=>{
     const label = s.Industry.split(' - ')[1] || s.Industry;
@@ -577,7 +642,7 @@ function renderYearChart(){
 }
 
 function renderNewLogos(){
-  document.getElementById('newLogoCount').textContent = `(${totals.new_filers_fy2026.toLocaleString()} total)`;
+  document.getElementById('newLogoCount').textContent = `(${totalsByYear['2026'].new_filers.toLocaleString()} total)`;
   document.getElementById('newLogosList').innerHTML = newLogos.slice(0,15).map(e=>`
     <div class="mini-row">
       <div>
