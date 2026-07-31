@@ -51,3 +51,9 @@ Data refreshes quarterly when USCIS updates the Data Hub. An n8n workflow watche
 - Some petitions have no employer name in the source file and are excluded from search/ranking (their worker counts still count toward the headline totals)
 - Denial rates reflect USCIS's first adjudicative decision only, not appeals or revocations
 - The Growth & New Logos section is intentionally independent of the year filter above it — it's always a FY2025→FY2026 view, since "who's new" and "who's growing" are inherently about the most recent transition, not whichever year you're currently browsing
+
+## Fixed: the "NA" employer bug
+
+An earlier build of this pipeline undercounted every fiscal year by exactly one real employer. Cause: `pandas.read_csv` treats the literal text `"NA"` as a missing value by default — and one real business in the source file is genuinely named `NA` (Danville, KY, 5 approved workers in FY2026; it also filed in FY2019–FY2025). Pandas silently converted that name to null and dropped it from every employer-level rollup across all 12 fiscal years.
+
+The bug was self-reinforcing: fixing it on the first `read_csv` call wasn't enough, because any *later* script that re-read an intermediate CSV file (without the same fix) reintroduced the same silent drop. The permanent fix does the entire pipeline — raw read through final JSON export — in one continuous in-memory pass with `keep_default_na=False, na_values=[]`, so no downstream CSV round-trip can undo it.
